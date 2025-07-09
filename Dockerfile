@@ -13,6 +13,9 @@ RUN npm install
 # 複製專案檔案
 COPY . .
 
+# 確保 public 和 views 目錄存在
+RUN mkdir -p public views
+
 # 建置應用程式
 RUN npm run build
 
@@ -26,8 +29,9 @@ WORKDIR /app
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/views ./views
+
+# 在當前容器建立目錄
+RUN mkdir -p public views
 
 # 設定環境變數
 ENV NODE_ENV=production
