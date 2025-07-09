@@ -1,0 +1,70 @@
+name: 部署到 Google Cloud Run
+
+# 觸發工作流程的事件
+on:
+  push:
+    branches:
+      - main  # 當推送到 main 分支時觸發
+
+# 環境變數
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  SERVICE_NAME: testexpress
+  REGION: asia-east1  # 台灣區域
+
+jobs:
+  # 構建和部署任務
+  deploy:
+    runs-on: ubuntu-latest
+    
+    # 部署步驟
+    steps:
+      # 檢出程式碼
+      - name: 檢出程式碼
+        uses: actions/checkout@v3
+
+      # 設定 Node.js 環境
+      - name: 設定 Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      # 安裝依賴
+      - name: 安裝依賴
+        run: npm ci
+
+      # 建置專案
+      - name: 建置專案
+        run: npm run build
+
+      # 設定 Google Cloud SDK
+      - name: 設定 Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true
+
+      # 授權 Docker 推送到 Google Container Registry
+      - name: 授權 Docker
+        run: gcloud auth configure-docker asia.gcr.io
+
+      # 建置 Docker 映像檔並推送到 Container Registry
+      - name: 建置並推送映像檔
+        run: |
+          docker build -t asia.gcr.io/$PROJECT_ID/$SERVICE_NAME:${{ github.sha }} .
+          docker push asia.gcr.io/$PROJECT_ID/$SERVICE_NAME:${{ github.sha }}
+
+      # 部署到 Cloud Run
+      - name: 部署到 Cloud Run
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v1
+        with:
+          service: ${{ env.SERVICE_NAME }}
+          image: asia.gcr.io/${{ env.PROJECT_ID }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          region: ${{ env.REGION }}
+          flags: --allow-unauthenticated  # 允許公開訪問
+
+      # 輸出部署的 URL
+      - name: 顯示部署 URL
+        run: echo "服務已部署到 ${{ steps.deploy.outputs.url }}"
